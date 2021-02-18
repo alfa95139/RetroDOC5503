@@ -2,7 +2,8 @@
 // RetroShield 6809 for Teensy 3.5
 // RetroDOC 5503
 //
-// Copyright (C) 2021 Erturk Kocalar, 8Bitforce.com
+// Copyright (C) 2021 Erturk Kocalar, Alessandro Fasan
+//  
 
 
 ////////////////////////////////////////////////////////////////////
