@@ -53,6 +53,7 @@ decrements at each iteration of loop().
 #define MEGA_PC1  (36)  // DOC CA3
 #define MEGA_PC0  (35)  // GND
 
+// THIS IS GPIOD
 #define MEGA_PL7  (5)   // DOC A15/D7
 #define MEGA_PL6  (21)  // DOC A14/D6
 #define MEGA_PL5  (20)  // DOC A13/D5
@@ -62,53 +63,50 @@ decrements at each iteration of loop().
 #define MEGA_PL1  (14)  // DOC  A9/D1
 #define MEGA_PL0  (2)   // DOC  A8/D0
 
-#define MEGA_PA7  (12)  // DOC A0
-#define MEGA_PA6  (11)  // DOC A1
+// This is GPIOA - I swapped it when I connected it. NEED TO REVERSE IN SW
+#define MEGA_PA7  (12)  // DOC A0 GPIOC, Teensy Pin 12 - bit7
+#define MEGA_PA6  (11)  // DOC A1 ..
 #define MEGA_PA5  (25)  // DOC A2
 #define MEGA_PA4  (10)  // DOC A3
 #define MEGA_PA3  (9)   // DOC A4
 #define MEGA_PA2  (23)  // DOC A5
-#define MEGA_PA1  (22)  // DOC A6
-#define MEGA_PA0  (15)  // DOC A7
+#define MEGA_PA1  (22)  // DOC A6 ..
+#define MEGA_PA0  (15)  // DOC A7 GPIOC, Teensy Pin 15 - bit 0
 
-/* Digital Pin Assignments 
+// Digital Pin Assignments 
 
-You can later optimize this by accessing the GPIOX_PDDR register directly.
-this is what we do for data bus.0=input, 1=output.
+// Set ADDR_L as input
+#define ADDR_L_dir_in1()        ((byte) (GPIOA_PDDR & ~0b0000000000100000))
+#define ADDR_L_dir_in2()        ((byte) (GPIOC_PDDR & ~0b0000000011011111))
+// Set ADDR_L as output
+#define ADDR_L_dir_out1()       ((byte) (GPIOA_PDDR | 0b0000000000100000))
+#define ADDR_L_dir_out2()       ((byte) (GPIOC_PDDR | 0b0000000011011111))
 
-#define xDATA_DIR_IN()    (GPIOD_PDDR = (GPIOD_PDDR & 0xFFFFFF00))       // same for RetroDOC
-#define xDATA_DIR_OUT()   (GPIOD_PDDR = (GPIOD_PDDR | 0x000000FF))       // same for RetroDOC
+#define ADDR_L_dir_in()        { ADDR_L_dir_in1();  ADDR_L_dir_in2()}
+#define ADDR_L_dir_out()       { ADDR_L_dir_out1(); ADDR_L_dir_out2()}
 
-So, modify above for xADDR_DIR_IN() and xADDR_DIR_OUT() using GPIOA_PDDR and the bitfields here.
+// READ ADDR0..7
+#define ADDR_L_RAW1        ((byte) (GPIOA_PDIR & 0b0000000000100000))
+#define ADDR_L_RAW2        ((byte) (GPIOC_PDIR & 0b0000000011011111))
+// build ADDR_L
+#define ADDR_L             (ADDR_L_RAW1 | ADDR_L_RAW2)
 
-//#define ADDR_H_RAW      ((word) (GPIOA_PDIR & 0b1111000000100000))    // how do I change direction?
-#define ADDR_L_RAW        ((word) (GPIOC_PDIR & 0b0000111111011111))    // how to I change direction?
+// WRITE ADDR0..7
+#define outADDR_L_RAW1(ADDR_L)     ((byte) ( (GPIOA_PDOR & ~(0b0000000000100000)) | (0b0000000000100000 & ADDR_L) )
+#define outADDR_L_RAW2(ADDR_L)     ((byte) ( (GPIOC_PDOR & ~(0b0000000011011111)) | (0b0000000011011111 & ADDR_L) )
 
-// read bits raw
-#define xDATA_DIR_IN()    (GPIOD_PDDR = (GPIOD_PDDR & 0xFFFFFF00))       // same for RetroDOC
-#define xDATA_DIR_OUT()   (GPIOD_PDDR = (GPIOD_PDDR | 0x000000FF))       // same for RetroDOC
-#define SET_DATA_OUT(D)   (GPIOD_PDOR = (GPIOD_PDOR & 0xFFFFFF00) | (D)) // same for RetroDOC
-#define xDATA_IN          ((byte) (GPIOD_PDIR & 0xFF))                   // same for RetroDOC
+#define outADDR_L(ADDR_L)   { outADDR_L_RAW1(ADDR_L); outADDR_L_RAW2(ADDR_L)}
 
-// Teensy has an LED on its digital pin13 (PTC5). which interferes w/
-// level shifters.  So we instead pick-up A5 from PTA5 port and use
-// PTC5 for PG0 purposes.
-//
-//#define ADDR_H_RAW        ((word) (GPIOA_PDIR & 0b1111000000100000))    // how do I change direction?
-#define ADDR_L_RAW        ((word) (GPIOC_PDIR & 0b0000111111011111))    // how to I change direction?
-// build ADDR, ADDR_H, ADDR_L
-//#define ADDR              ((word) (ADDR_H_RAW | ADDR_L_RAW))
-#define ADDR_in           ((word) (xDATA_DIR_IN() << 8 | ADDR_L_RAW))
-//#define ADDR_H            ((byte) ((ADDR & 0xFF00) >> 8))
-#define ADDR_L            ((byte) (ADDR & 0x00FF))
-
-*/
+/* OLD VERSION - REMOVE
 
 #define SET_DATA_OUT(D)   (GPIOD_PDOR = (GPIOD_PDOR & 0xFFFFFF00) | (D)) // same for RetroDOC
-#define xDATA_IN          ((byte) (GPIOD_PDIR & 0xFF))    
+#define xDATA_IN          ((byte) (GPIOD_PDIR & 0xFF))                    // for RetroDOC, these are also A15..A8
+#define xADDR_H_IN        xDATA_IN
 // same for RetroDOC
-//#define ADDR_L_RAW        ((word) (GPIOC_PDIR & 0b0000111111011111))    // how to I change direction?
-//#define ADDR_L            ((byte) (ADDR & 0x00FF))
+#define ADDR_L_RAW        ((word) (GPIOC_PDIR & 0b0000111111011111))    // how to I change direction?
+#define ADDR_L            ((byte) (ADDR_L_RAW & 0x00FF))
+#define xADDR_L_IN     
+*/   
 
 #define DOC_RESET_N  MEGA_PD7    // RST_ output to RetroDOC
 #define DOC_RW_N     MEGA_PG1    // RW_  output to RetroDOC
@@ -131,7 +129,6 @@ So, modify above for xADDR_DIR_IN() and xADDR_DIR_OUT() using GPIOA_PDDR and the
 //
 #define CLK_HIGH          (GPIOA_PSOR = 0x20000)
 #define CLK_LOW           (GPIOA_PCOR = 0x20000)
-#define STATE_RW_N          ((byte) (GPIOB_PDIR & 0x01) ) // same for RetroDOC
 
 unsigned long clock_cycle_count;
 
@@ -318,6 +315,7 @@ while(1)
                                         Serial.printf("CPU (cycle %d): WRITE DOC register=%x, data=%x\n", PC, PROGRAM[1][PC], PROGRAM[2][PC] );
                                         xCPU_DIR_WRITE();
                                         SET_DATA_OUT(PROGRAM[2][PC]); 
+                                        
                                         digitalWrite(DOC_RW_N, 0); // WRITE to DOC Reg
                                         delay(2);
                                 }
@@ -366,6 +364,7 @@ while(1)
     if( (m_E==1) & (E==0) ) {
         xDOC_BUS();
         Serial.printf("Negedge E detected: time for the DOC to work...\n");
+        // xADDR_H_IN contains the high part of the address?
         // negedege E - here the DOC drives
         // Which means: A15 to A0 are input (output from DOC)
         // check for ADDRESS, BS, CA3,CA2,CA1,CA0, CSTRB,  and IRQ here
