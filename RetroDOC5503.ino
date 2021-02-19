@@ -85,22 +85,25 @@ decrements at each iteration of loop().
 #define ADDR_L_dir_in()        { ADDR_L_dir_in1();  ADDR_L_dir_in2()}
 #define ADDR_L_dir_out()       { ADDR_L_dir_out1(); ADDR_L_dir_out2()}
 
-// READ ADDR0..7
-#define ADDR_L_RAW1        ((byte) (GPIOA_PDIR & 0b0000000000100000))
-#define ADDR_L_RAW2        ((byte) (GPIOC_PDIR & 0b0000000011011111))
-// build ADDR_L
-#define ADDR_L             (ADDR_L_RAW1 | ADDR_L_RAW2)
+// READ A0..A7 - DOC is driving 
+#define inADDR_L_RAW1        ((byte) (GPIOA_PDIR & 0b0000000000100000))
+#define inADDR_L_RAW2        ((byte) (GPIOC_PDIR & 0b0000000011011111))
+// build inADDR_L
+#define inADDR_L             (inADDR_L_RAW1 | inADDR_L_RAW2)
 
-// WRITE ADDR0..7
-#define outADDR_L_RAW1(ADDR_L)     ((byte) ( (GPIOA_PDOR & ~(0b0000000000100000)) | (0b0000000000100000 & ADDR_L) )
-#define outADDR_L_RAW2(ADDR_L)     ((byte) ( (GPIOC_PDOR & ~(0b0000000011011111)) | (0b0000000011011111 & ADDR_L) )
-
-#define outADDR_L(ADDR_L)   { outADDR_L_RAW1(ADDR_L); outADDR_L_RAW2(ADDR_L)}
-
-/* OLD VERSION - REMOVE
+// WRITE A0..A7 - CPU is driving
+#define outADDR_L_RAW1(ADDR_low)     ((byte) ( (GPIOA_PDOR & ~(0b0000000000100000)) | (0b0000000000100000 & ADDR_low) )
+#define outADDR_L_RAW2(ADDR_low)     ((byte) ( (GPIOC_PDOR & ~(0b0000000011011111)) | (0b0000000011011111 & ADDR_low) )
+// build outADD_L
+#define outADDR_L(ADDR_low)   { outADDR_L_RAW1(ADDR_low); outADDR_L_RAW2(ADDR_low)}
 
 #define SET_DATA_OUT(D)   (GPIOD_PDOR = (GPIOD_PDOR & 0xFFFFFF00) | (D)) // same for RetroDOC
+#define outADDR_H(D)      SET_DATA_OUT(D)                                 // A15..A8 - normally 0 for WRITE
 #define xDATA_IN          ((byte) (GPIOD_PDIR & 0xFF))                    // for RetroDOC, these are also A15..A8
+#define inADDR_H          xDATA_IN
+//#define inADDR            (word)(inADDR_H << 8) | inADDR_L) // ONLY IF YOU FIGURE OUT A WAY TO REVERSE inADDR_L with #defines)
+
+/* OLD VERSION - REMOVE
 #define xADDR_H_IN        xDATA_IN
 // same for RetroDOC
 #define ADDR_L_RAW        ((word) (GPIOC_PDIR & 0b0000111111011111))    // how to I change direction?
@@ -135,7 +138,13 @@ unsigned long clock_cycle_count;
 word DOC_ADDR;
 byte DOC_DATA;
 
-
+// To be used with ADD LOW
+byte reverse(byte b) {
+   b = (b & 0xF0) >> 4 | (b & 0x0F) << 4;
+   b = (b & 0xCC) >> 2 | (b & 0x33) << 2;
+   b = (b & 0xAA) >> 1 | (b & 0x55) << 1;
+   return b;
+}
 
 //  Set direction for CPU BUS, READ operation
 void xCPU_DIR_READ()
@@ -315,7 +324,7 @@ while(1)
                                         Serial.printf("CPU (cycle %d): WRITE DOC register=%x, data=%x\n", PC, PROGRAM[1][PC], PROGRAM[2][PC] );
                                         xCPU_DIR_WRITE();
                                         SET_DATA_OUT(PROGRAM[2][PC]); 
-                                        
+                                        ADDR_L = reverse(PROGRAM[1][PC];
                                         digitalWrite(DOC_RW_N, 0); // WRITE to DOC Reg
                                         delay(2);
                                 }
