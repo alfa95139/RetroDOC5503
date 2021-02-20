@@ -12,15 +12,34 @@
 ////////////////////////////////////////////////////////////////////
 #define outputDEBUG     0
 
+#define rFreqLow        0x00    // to 0x1F
+#define rFreqHigh       0x20    // to 0x3F
+#define rVolume         0x40    // to 0x5F
+#define rDatasample     0x60    // to 0x7F
+#define rAddressPtr     0x80    // to 0x9F
+#define rControl        0xA0    // to 0xBF       [CA3, CA2, CA1, CA0, IE, M2, M1,  H]
+#define rResTableSize   0xC0    // to 0xDF       [ NU,  BS,  T2,  T1, T0, R2, R1, R0]
+#define rOIR            0xE0    // Osc Interrupt [ IR,   1,  o4,  o3, o2, o1, o0,  1]
+#define rOER            0xE1    // Osc Enable    [  1,   1,  e4,  e3, e2, e1, e0,  1]
+#define rADC            0xE2    // A/D Converter
 
-byte PROGRAM[][5] = {
-   {'W', 0x10, 0xAA},         // Write register 0x10 with value 0xAA
-   {'D', 0x08},               // NOP for 8 cycles
-   {'R', 0x10, 0xA1},         // READ register 0x10, expect value 0xAA -> should flag that expected data is different (show received data)
-   {'d'},                     // NOP
-   {'r', 0x10},               // READ register 0x10, no expected value  
+byte PROGRAM[][100] = {
+   {'W', rFreqLow        ,      0xF0},
+   {'W', rFreqLow  + 0x01,      0xF0},
+   {'W', rFreqHigh,             0x0F},
+   {'W', rFreqHigh + 0x01,      0x0F},
+   {'R', rFreqLow,              0xF0},  
+   {'R', rFreqLow  + 0x01,       0xF0},  
+   {'R', rFreqHigh,             0x0F},  
+   {'R', rFreqHigh  + 0x01,      0x0F}, 
+   {'D', 0x08},                         // NOP for 8 cycles
+   {'d'},                               // NOP
+   {'r', rOIR},                         //  
+   {'r', rOER},                         // 
+   {'r', rADC},                         //
    {'E'}          // END of program
 };
+
 
 /*
 D is delay in terms of cpu cycles.
@@ -92,10 +111,11 @@ decrements at each iteration of loop().
 #define inADDR_L             (inADDR_L_RAW1 | inADDR_L_RAW2)
 
 // WRITE A0..A7 - CPU is driving
-#define outADDR_L_RAW1(ADDR_low)     ((byte) ( (GPIOA_PDOR & ~(0b0000000000100000)) | (0b0000000000100000 & ADDR_low) )
-#define outADDR_L_RAW2(ADDR_low)     ((byte) ( (GPIOC_PDOR & ~(0b0000000011011111)) | (0b0000000011011111 & ADDR_low) )
+#define outADDR_L_RAW1(ADDR_low)     ((byte) ( (GPIOA_PDOR & ~(0b0000000000100000)) | (0b0000000000100000 & ADDR_low) ))
+#define outADDR_L_RAW2(ADDR_low)     ((byte) ( (GPIOC_PDOR & ~(0b0000000011011111)) | (0b0000000011011111 & ADDR_low) ))
 // build outADD_L
-#define outADDR_L(ADDR_low)   { outADDR_L_RAW1(ADDR_low); outADDR_L_RAW2(ADDR_low)}
+#define outADDR_L(ADDR_low)          { outADDR_L_RAW1(ADDR_low); outADDR_L_RAW2(ADDR_low);}
+
 
 #define SET_DATA_OUT(D)   (GPIOD_PDOR = (GPIOD_PDOR & 0xFFFFFF00) | (D)) // same for RetroDOC
 #define outADDR_H(D)      SET_DATA_OUT(D)                                 // A15..A8 - normally 0 for WRITE
@@ -133,7 +153,7 @@ decrements at each iteration of loop().
 #define CLK_HIGH          (GPIOA_PSOR = 0x20000)
 #define CLK_LOW           (GPIOA_PCOR = 0x20000)
 
-unsigned long clock_cycle_count;
+unsigned long clock_cycle_count=0;
 
 word DOC_ADDR;
 byte DOC_DATA;
@@ -244,7 +264,8 @@ volatile byte DATA_OUT;
 volatile byte DATA_IN;
 
 volatile byte ADDRESS_OUT;
-volatile byte ADDRESS_IN;
+volatile byte ADDRESS_IN_LOW;
+volatile byte ADDRESS_IN_HIGH;
 
 int clk;
 
@@ -296,6 +317,7 @@ void setup()
 int E, m_E = 0; 
 int PC = 0;
 bool cpu_halt = false;
+int nop_counter = 0;
 
 void loop()
 {
@@ -312,48 +334,47 @@ while(1)
         if (!cpu_halt)
                 if( (m_E ==0) & (E==1) ) {
                         Serial.printf("Posedege E detected: Time for the CPU to work here...\n");
-                        digitalWrite(DOC_CS_N, 0); // assert CS_
+                        clock_cycle_count++;
+                        if(nop_counter > 0) {
+                                Serial.printf("CPU (cycle %d): NOP\n", clock_cycle_count);
+                                nop_counter--;
+                                }
+                                else
                         switch(PROGRAM[0][PC]) {
                                 case 'd':       // ***  NOP  ***
-                                        Serial.printf("CPU (cycle %d): NOP\n", PC);
+                                        Serial.printf("CPU (cycle %d): NOP\n", clock_cycle_count);
                                 break;
                                 case 'D': {      // *** NOP x CYCLES ***
-                                        Serial.printf("CPU (cycle %d): NOP\n", PC);
+                                        Serial.printf("CPU (cycle %d): NOP\n", clock_cycle_count);
+                                        nop_counter = (uint8_t)PROGRAM[1][PC];
+                                        if(nop_counter == 0) nop_counter=0;
                                 }
                                 case 'W': {     // *** WRITE ***
-                                        Serial.printf("CPU (cycle %d): WRITE DOC register=%x, data=%x\n", PC, PROGRAM[1][PC], PROGRAM[2][PC] );
+                                        Serial.printf("CPU (cycle %d): WRITE DOC register=%x, data=%x\n", clock_cycle_count, PROGRAM[1][PC], PROGRAM[2][PC] );
                                         xCPU_DIR_WRITE();
-                                        SET_DATA_OUT(PROGRAM[2][PC]); 
-                                        ADDR_L = reverse(PROGRAM[1][PC];
-                                        digitalWrite(DOC_RW_N, 0); // WRITE to DOC Reg
+                                        outADDR_L(PROGRAM[1][PC]);       //ADDR_L = reverse(PROGRAM[1][PC];
                                         delay(2);
+                                        digitalWrite(DOC_RW_N, 0);       // WRITE to DOC Reg
+                                        digitalWrite(DOC_CS_N, 0);       // assert CS_
+                                        SET_DATA_OUT(PROGRAM[2][PC]); 
                                 }
                                 break;
                                 case 'R': {     // *** READ VERIFY ***
-                                        Serial.printf("CPU (cycle %d):   READ DOC register=%x, EXPECTED data=%x, ", PC, PROGRAM[1][PC], PROGRAM[2][PC] );
+                                        Serial.printf("CPU (cycle %d):   READ DOC register=%x, EXPECTED data=%x, ", clock_cycle_count, PROGRAM[1][PC], PROGRAM[2][PC] );
                                         xCPU_DIR_READ();
                                         digitalWrite(DOC_RW_N, 1); // READ from DOC
-                                        // set address here   <<< HOW
+                                        outADDR_L(PROGRAM[1][PC]);       //ADDR_L = reverse(PROGRAM[1][PC];
                                         delay(2);
-                                        while(DOC_RAS_N == 1);  // wait until DOC asserts RAS (active low)
-                                       
-                                        DATA_IN= xDATA_IN;
-                                        Serial.printf("READ %x\n", DATA_IN);
-                                        if (PROGRAM[2][PC] != DATA_IN) {        // Check expected data
-                                                Serial.printf("CPU ERROR ON CPU READ - CPU WILL HALT\n");
-                                                cpu_halt = true;        // Stop CPU on error
-                                                }
+                                        digitalWrite(DOC_CS_N, 0);       // assert CS_
                                 }
                                 break;
-                                case 'e': {     // *** READ  ***
-                                        Serial.printf("CPU (cycle %d):   READ DOC register=%x, ", PC, PROGRAM[1][PC] );
+                                case 'r': {     // *** READ  ***
+                                        Serial.printf("CPU (cycle %d):   READ DOC register=%x, ", clock_cycle_count, PROGRAM[1][PC] );
                                         xCPU_DIR_READ();
-                                        digitalWrite(DOC_RW_N, 1); // READ from DOC
-                                        // set address here    <<< HOW
+                                        digitalWrite(DOC_RW_N, 1); // READ  DOC register
+                                        outADDR_L(PROGRAM[1][PC]);       //ADDR_L = reverse(PROGRAM[1][PC];
                                         delay(2);
-                                        while(DOC_RAS_N == 1);  // wait until DOC asserts RAS (active low)
-                                        DATA_IN= xDATA_IN;
-                                        Serial.printf("READ %x\n", DATA_IN);
+                                        digitalWrite(DOC_CS_N, 0);       // assert CS_
                                 }
                                 case 'E':       // *** END PROGRAM ***
                                         cpu_halt = true; // Stop CPU
@@ -363,20 +384,44 @@ while(1)
                                         cpu_halt = true; // Stop CPU
                                 }
                         } // switch
-
-                PC++;                           // update Program Counter
-                delay(2);                       // short delay
-                digitalWrite(DOC_CS_N, 1);      // de-assert CS_
-                
                 } // posedge E
 
     if( (m_E==1) & (E==0) ) {
+        // finish managing reads
+        switch(PROGRAM[0][PC]) {
+                case 'R': {     // *** complete READ VERIFY ***
+                        DATA_IN= xDATA_IN;
+                       Serial.printf("READ %x\n", DATA_IN);
+                       if (PROGRAM[2][PC] != DATA_IN) {        // Check expected data
+                                    Serial.printf("CPU ERROR ON CPU READ - CPU WILL HALT\n");
+                                    cpu_halt = true;        // Stop CPU on error
+                                    }
+                }
+                case 'r': {     // *** complete READ  ***
+                        DATA_IN= xDATA_IN;
+                        Serial.printf("READ %x\n", DATA_IN);
+                }
+        }
+        PC++;                           // update Program Counter
+        digitalWrite(DOC_CS_N, 1);      // de-assert CS_
+        digitalWrite(DOC_RW_N, 1);       // de-assert RW_ if was write
+
         xDOC_BUS();
         Serial.printf("Negedge E detected: time for the DOC to work...\n");
-        // xADDR_H_IN contains the high part of the address?
-        // negedege E - here the DOC drives
-        // Which means: A15 to A0 are input (output from DOC)
-        // check for ADDRESS, BS, CA3,CA2,CA1,CA0, CSTRB,  and IRQ here
+        while(digitalRead(DOC_RAS_N) == 1);  // at the negedge of RAS_ we read the address lines
+        delay(2);       // let signals settle
+        ADDRESS_IN_LOW  = inADDR_L;
+        ADDRESS_IN_HIGH = inADDR_H;
+        byte cstrb_n = digitalRead(DOC_CSTRB_N);
+        byte CA      = digitalRead(DOC_CA0);
+        CA           = (digitalRead(DOC_CA1) << 1) | CA;
+        CA           = (digitalRead(DOC_CA2) << 2) | CA;
+        CA           = (digitalRead(DOC_CA3) << 3) | CA;
+        byte irq_n   = digitalRead(DOC_IRQ_N);
+        byte bankSel = digitalRead(DOC_BS);
+        Serial.printf("DOC: Bank %d: Address %x%x\n", bankSel, ADDRESS_IN_HIGH, ADDRESS_IN_LOW);
+        Serial.printf("DOC: {CA3, CA2, CA1, CA0 } = {%x} CSTRB = %x\n", CA, cstrb_n);
+        Serial.printf("DOC: IRQ_ is %s\n", irq_n ? "HIGH" : "LOW");
     } // negedge E
 
     m_E = E; // Do this here
